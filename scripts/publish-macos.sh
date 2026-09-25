@@ -7,7 +7,7 @@
 #
 # Run this ON a Mac with the `fly-prod` AWS profile configured, AFTER
 # scripts/build-macos.sh has produced a signed, notarized build (a single *.dmg
-# under src-tauri/target/universal-apple-darwin/release/bundle/dmg/).
+# under src-tauri/target/aarch64-apple-darwin/release/bundle/dmg/).
 #
 # The pointers are written only after the versioned upload succeeds and always
 # overwrite the previous ones (--force-overwrite gates only the versioned key).
@@ -26,7 +26,7 @@ BUCKET="${BUCKET:-downloads-d28db135aff5}"
 REGION="${REGION:-us-east-2}"
 PROFILE="${AWS_PROFILE_NAME:-fly-prod}"
 BASE_URL="${BASE_URL:-https://dl.exploretech.app}"
-DMG_DIR="${DMG_DIR:-src-tauri/target/universal-apple-darwin/release/bundle/dmg}"
+DMG_DIR="${DMG_DIR:-src-tauri/target/aarch64-apple-darwin/release/bundle/dmg}"
 PREFIX="parquetview/darwin"
 STABLE_NAME="ParquetView.dmg"
 

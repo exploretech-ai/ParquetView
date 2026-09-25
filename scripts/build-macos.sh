@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Build a universal (arm64 + x86_64), Developer-ID-signed, notarized macOS
-# release: ParquetView.app plus a DMG installer.
+# Build an Apple Silicon (arm64), Developer-ID-signed, notarized macOS release:
+# ParquetView.app plus a DMG installer.
 #
 # tauri.conf.json stays ad-hoc signed ("-") with an app-only bundle so plain
 # `npm run tauri build` and install.sh keep working without the ExploreTech
@@ -13,7 +13,7 @@
 # Under devbox, the Nix cc wrapper bakes its own /nix/store libiconv into the
 # executable. That dylib is signed outside our Team ID, so the hardened-runtime
 # app aborts at launch ("different Team IDs"). Every rustc link — including the
-# per-arch relinks `tauri build` does — is routed through scripts/macos-link.sh,
+# relink `tauri build` does — is routed through scripts/macos-link.sh,
 # which repoints libiconv at the system copy. See that script for details.
 #
 # Needs, on the Mac running it:
@@ -21,7 +21,7 @@
 #     login keychain
 #   - an app-specific password in the keychain:
 #       security add-generic-password -s AppleID -a tauri-signing -w <password>
-#   - both Rust targets: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+#   - the Rust target: rustup target add aarch64-apple-darwin
 #
 # Usage: scripts/build-macos.sh   (inside the devbox shell; then scripts/publish-macos.sh)
 
@@ -29,19 +29,16 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-TARGET="universal-apple-darwin"
+TARGET="aarch64-apple-darwin"
 BUNDLE_DIR="src-tauri/target/$TARGET/release/bundle"
 APP="$BUNDLE_DIR/macos/ParquetView.app"
 SIGNING_IDENTITY="Developer ID Application: Exploration Technologies, Inc (CK8MVY2C3J)"
 
 echo "==> Checking toolchain"
-installed_targets="$(rustup target list --installed)"
-for t in aarch64-apple-darwin x86_64-apple-darwin; do
-  if ! grep -qx "$t" <<<"$installed_targets"; then
-    echo "!! missing Rust target $t. Run: rustup target add aarch64-apple-darwin x86_64-apple-darwin" >&2
-    exit 1
-  fi
-done
+if ! rustup target list --installed | grep -qx "$TARGET"; then
+  echo "!! missing Rust target $TARGET. Run: rustup target add $TARGET" >&2
+  exit 1
+fi
 
 echo "==> Loading notarization credentials"
 export APPLE_ID='kai.wells@exploretech.ai'
@@ -59,17 +56,12 @@ export PATH="$shim_dir:$PATH"
 
 # Route every rustc link step through the wrapper that rewrites Nix libiconv ->
 # the system copy. Absolute path: Tauri runs cargo from src-tauri/, so a
-# relative linker path wouldn't resolve. Both arches, since this is a universal
-# build.
-WRAPPER="$PWD/scripts/macos-link.sh"
-export CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER="$WRAPPER"
-export CARGO_TARGET_X86_64_APPLE_DARWIN_LINKER="$WRAPPER"
+# relative linker path wouldn't resolve.
+export CARGO_TARGET_AARCH64_APPLE_DARWIN_LINKER="$PWD/scripts/macos-link.sh"
 
-# Changing the linker doesn't invalidate Cargo's fingerprint, so force a relink
-# of both per-arch binaries; otherwise a stale (Nix-linked) artifact slips into
-# the universal binary that lipo assembles from them.
-rm -f src-tauri/target/aarch64-apple-darwin/release/parquetview \
-      src-tauri/target/x86_64-apple-darwin/release/parquetview
+# Changing the linker doesn't invalidate Cargo's fingerprint, so force a relink;
+# otherwise a stale (Nix-linked) binary slips into the bundle.
+rm -f "src-tauri/target/$TARGET/release/parquetview"
 
 # tauri build overwrites same-named outputs but never purges the bundle dirs, so
 # a version bump would leave the prior version's DMG (its name encodes the
@@ -98,12 +90,11 @@ BUNDLED_BIN="$APP/Contents/MacOS/$exe"
 
 archs="$(lipo -archs "$BUNDLED_BIN")"
 echo "    architectures: $archs"
-if [[ " $archs " != *" arm64 "* || " $archs " != *" x86_64 "* ]]; then
-  echo "!! expected a universal binary (arm64 + x86_64)." >&2
+if [ "$archs" != "arm64" ]; then
+  echo "!! expected an arm64-only binary." >&2
   exit 1
 fi
 
-# otool -L on a universal binary lists the load commands of both slices.
 echo "    libiconv refs:"
 otool -L "$BUNDLED_BIN" | grep -i iconv | sed 's/^/      /'
 if otool -L "$BUNDLED_BIN" | grep -q nix/store; then
