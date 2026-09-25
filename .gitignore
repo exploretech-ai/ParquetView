@@ -22,3 +22,6 @@ DerivedData/
 # Local publish helpers (not part of the public repo)
 PUBLISH.md
 RELEASE_NOTES.md
+
+# devbox local state
+.devbox/
